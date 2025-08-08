@@ -25,17 +25,19 @@
     let score = 0;
     let timeLeft = 60;
     let timerInterval;
+    let gameActive = false;
 
     function startGame() {
       const name = document.getElementById('playerName').value.trim();
       if (!name) { alert('Enter your name'); return; }
       score = 0;
       timeLeft = 60;
+      gameActive = true;
       document.getElementById('score').innerText = 'Score: 0';
       document.getElementById('timer').innerText = 'Time: 60';
-      cards = [];
       selected = [];
       generateCards();
+      clearInterval(timerInterval);
       timerInterval = setInterval(() => {
         timeLeft--;
         document.getElementById('timer').innerText = 'Time: ' + timeLeft;
@@ -47,13 +49,14 @@
     }
 
     function generateCards() {
-      const gameDiv = document.getElementById('game');
-      gameDiv.innerHTML = '';
-      while (cards.length < 10) {
+      cards = [];
+      const usedPairs = [];
+      while (usedPairs.length < 5) {
         const pair = vocab[Math.floor(Math.random() * vocab.length)];
-        if (!cards.find(c => c.word === pair.english) && !cards.find(c => c.word === pair.french)) {
-          cards.push({ word: pair.english, match: pair.french });
-          cards.push({ word: pair.french, match: pair.english });
+        if (!usedPairs.includes(pair)) {
+          usedPairs.push(pair);
+          cards.push({ word: pair.english, match: pair.french, lang: 'en' });
+          cards.push({ word: pair.french, match: pair.english, lang: 'fr' });
         }
       }
       shuffle(cards);
@@ -63,37 +66,53 @@
     function renderCards() {
       const gameDiv = document.getElementById('game');
       gameDiv.innerHTML = '';
-      cards.slice(0, 5).forEach((card, idx) => {
+      cards.forEach((card, idx) => {
         const el = document.createElement('div');
         el.className = 'card';
         el.innerText = card.word;
-        el.onclick = () => selectCard(card, idx);
+        el.onclick = () => selectCard(el, card, idx);
         gameDiv.appendChild(el);
       });
     }
 
-    function selectCard(card, idx) {
-      selected.push({ card, idx });
+    function selectCard(element, card, idx) {
+      if (!gameActive) return;
+      if (selected.some(s => s.idx === idx)) return; // prevent selecting same card twice
+      selected.push({ element, card, idx });
       if (selected.length === 2) {
-        if (selected[0].card.match === selected[1].card.word) {
+        const [first, second] = selected;
+        if (first.card.match === second.card.word && first.card.lang === 'en') {
+          first.element.classList.add('correct');
+          second.element.classList.add('correct');
           score++;
           document.getElementById('score').innerText = 'Score: ' + score;
-          replaceCard(selected[0].idx);
-          replaceCard(selected[1].idx);
+          setTimeout(() => {
+            replacePair(first.idx, second.idx);
+            selected = [];
+          }, 300);
+        } else {
+          first.element.classList.add('incorrect');
+          second.element.classList.add('incorrect');
+          setTimeout(() => {
+            first.element.classList.remove('incorrect');
+            second.element.classList.remove('incorrect');
+            selected = [];
+          }, 500);
         }
-        selected = [];
       }
     }
 
-    function replaceCard(index) {
+    function replacePair(idx1, idx2) {
       const pair = vocab[Math.floor(Math.random() * vocab.length)];
-      const isEnglish = Math.random() > 0.5;
-      const newCard = isEnglish ? { word: pair.english, match: pair.french } : { word: pair.french, match: pair.english };
-      cards[index] = newCard;
+      cards[idx1] = { word: pair.english, match: pair.french, lang: 'en' };
+      cards[idx2] = { word: pair.french, match: pair.english, lang: 'fr' };
+      shuffle(cards);
       renderCards();
     }
 
     function endGame() {
+      if (!gameActive) return;
+      gameActive = false;
       const name = document.getElementById('playerName').value.trim();
       saveScore(name, score);
       showLeaderboard();
