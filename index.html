@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>French Vocab Match</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="manifest" href="manifest.json">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body>
+  <h1>French Vocab Match</h1>
+  <div>
+    <input id="playerName" placeholder="Enter your name">
+    <button onclick="startGame()">Start Game</button>
+  </div>
+  <div id="timer">Time: 60</div>
+  <div id="score">Score: 0</div>
+  <div id="game"></div>
+  <div id="scoreboard"></div>
+
+  <script src="vocab.js"></script>
+  <script>
+    let cards = [];
+    let selected = [];
+    let score = 0;
+    let timeLeft = 60;
+    let timerInterval;
+
+    function startGame() {
+      const name = document.getElementById('playerName').value.trim();
+      if (!name) { alert('Enter your name'); return; }
+      score = 0;
+      timeLeft = 60;
+      document.getElementById('score').innerText = 'Score: 0';
+      document.getElementById('timer').innerText = 'Time: 60';
+      cards = [];
+      selected = [];
+      generateCards();
+      timerInterval = setInterval(() => {
+        timeLeft--;
+        document.getElementById('timer').innerText = 'Time: ' + timeLeft;
+        if (timeLeft <= 0) {
+          clearInterval(timerInterval);
+          endGame();
+        }
+      }, 1000);
+    }
+
+    function generateCards() {
+      const gameDiv = document.getElementById('game');
+      gameDiv.innerHTML = '';
+      while (cards.length < 10) {
+        const pair = vocab[Math.floor(Math.random() * vocab.length)];
+        if (!cards.find(c => c.word === pair.english) && !cards.find(c => c.word === pair.french)) {
+          cards.push({ word: pair.english, match: pair.french });
+          cards.push({ word: pair.french, match: pair.english });
+        }
+      }
+      shuffle(cards);
+      renderCards();
+    }
+
+    function renderCards() {
+      const gameDiv = document.getElementById('game');
+      gameDiv.innerHTML = '';
+      cards.slice(0, 5).forEach((card, idx) => {
+        const el = document.createElement('div');
+        el.className = 'card';
+        el.innerText = card.word;
+        el.onclick = () => selectCard(card, idx);
+        gameDiv.appendChild(el);
+      });
+    }
+
+    function selectCard(card, idx) {
+      selected.push({ card, idx });
+      if (selected.length === 2) {
+        if (selected[0].card.match === selected[1].card.word) {
+          score++;
+          document.getElementById('score').innerText = 'Score: ' + score;
+          replaceCard(selected[0].idx);
+          replaceCard(selected[1].idx);
+        }
+        selected = [];
+      }
+    }
+
+    function replaceCard(index) {
+      const pair = vocab[Math.floor(Math.random() * vocab.length)];
+      const isEnglish = Math.random() > 0.5;
+      const newCard = isEnglish ? { word: pair.english, match: pair.french } : { word: pair.french, match: pair.english };
+      cards[index] = newCard;
+      renderCards();
+    }
+
+    function endGame() {
+      const name = document.getElementById('playerName').value.trim();
+      saveScore(name, score);
+      showLeaderboard();
+      alert('Time up! Your score: ' + score);
+    }
+
+    function saveScore(name, score) {
+      const scores = JSON.parse(localStorage.getItem('scores') || '[]');
+      scores.push({ name, score, date: new Date().toLocaleDateString() });
+      localStorage.setItem('scores', JSON.stringify(scores));
+    }
+
+    function showLeaderboard() {
+      const scores = JSON.parse(localStorage.getItem('scores') || '[]');
+      scores.sort((a,b) => b.score - a.score);
+      let html = '<h2>Leaderboard</h2><table><tr><th>Name</th><th>Score</th><th>Date</th></tr>';
+      scores.slice(0,10).forEach(s => {
+        html += `<tr><td>${s.name}</td><td>${s.score}</td><td>${s.date}</td></tr>`;
+      });
+      html += '</table>';
+      document.getElementById('scoreboard').innerHTML = html;
+    }
+
+    function shuffle(array) {
+      for (let i = array.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [array[i], array[j]] = [array[j], array[i]];
+      }
+    }
+
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('service-worker.js');
+      });
+    }
+
+    showLeaderboard();
+  </script>
+</body>
+</html>
