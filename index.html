@@ -2,21 +2,30 @@
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>French Vocab Match</title>
+  <title>Vite les Mots 🎯</title>
   <link rel="stylesheet" href="style.css">
   <link rel="manifest" href="manifest.json">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 </head>
 <body>
-  <h1>French Vocab Match</h1>
+  <header>🎯 Vite les Mots</header>
   <div>
     <input id="playerName" placeholder="Enter your name">
     <button onclick="startGame()">Start Game</button>
   </div>
-  <div id="timer">Time: 60</div>
-  <div id="score">Score: 0</div>
+  <div id="game-info">
+    <span id="timer">Time: 60</span> | <span id="score">Score: 0</span>
+  </div>
   <div id="game"></div>
-  <div id="scoreboard"></div>
+
+  <div id="modal">
+    <div id="modal-content">
+      <h2>Game Over!</h2>
+      <p id="final-score"></p>
+      <div id="scoreboard"></div>
+      <button onclick="closeModal()">Play Again</button>
+    </div>
+  </div>
 
   <script src="vocab.js"></script>
   <script>
@@ -77,7 +86,7 @@
 
     function selectCard(element, card, idx) {
       if (!gameActive) return;
-      if (selected.some(s => s.idx === idx)) return; // prevent selecting same card twice
+      if (selected.some(s => s.idx === idx)) return;
       selected.push({ element, card, idx });
       if (selected.length === 2) {
         const [first, second] = selected;
@@ -106,7 +115,6 @@
       const pair = vocab[Math.floor(Math.random() * vocab.length)];
       cards[idx1] = { word: pair.english, match: pair.french, lang: 'en' };
       cards[idx2] = { word: pair.french, match: pair.english, lang: 'fr' };
-      shuffle(cards);
       renderCards();
     }
 
@@ -116,7 +124,8 @@
       const name = document.getElementById('playerName').value.trim();
       saveScore(name, score);
       showLeaderboard();
-      alert('Time up! Your score: ' + score);
+      document.getElementById('final-score').innerText = 'Your score: ' + score;
+      document.getElementById('modal').style.display = 'flex';
     }
 
     function saveScore(name, score) {
@@ -128,12 +137,17 @@
     function showLeaderboard() {
       const scores = JSON.parse(localStorage.getItem('scores') || '[]');
       scores.sort((a,b) => b.score - a.score);
-      let html = '<h2>Leaderboard</h2><table><tr><th>Name</th><th>Score</th><th>Date</th></tr>';
+      let html = '<h3>Leaderboard</h3><table><tr><th>Name</th><th>Score</th><th>Date</th></tr>';
       scores.slice(0,10).forEach(s => {
         html += `<tr><td>${s.name}</td><td>${s.score}</td><td>${s.date}</td></tr>`;
       });
       html += '</table>';
       document.getElementById('scoreboard').innerHTML = html;
+    }
+
+    function closeModal() {
+      document.getElementById('modal').style.display = 'none';
+      startGame();
     }
 
     function shuffle(array) {
@@ -148,8 +162,6 @@
         navigator.serviceWorker.register('service-worker.js');
       });
     }
-
-    showLeaderboard();
   </script>
 </body>
 </html>
