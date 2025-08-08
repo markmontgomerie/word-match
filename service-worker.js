@@ -1,6 +1,6 @@
 self.addEventListener('install', e => {
   e.waitUntil(
-    caches.open('vocab-game-cache').then(cache => {
+    caches.open('vite-mots-cache').then(cache => {
       return cache.addAll([
         './',
         './index.html',
