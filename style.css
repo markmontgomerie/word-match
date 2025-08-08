@@ -1,10 +1,23 @@
-body { font-family: Arial, sans-serif; text-align: center; background: #f4f4f4; }
-h1 { margin-top: 20px; }
-#game { display: flex; flex-wrap: wrap; justify-content: center; max-width: 600px; margin: 20px auto; }
-.card {
-  background: white; border: 2px solid #333; border-radius: 8px; margin: 10px; padding: 20px; cursor: pointer; width: 120px; height: 60px;
-  display: flex; justify-content: center; align-items: center; font-size: 18px; box-shadow: 2px 2px 8px rgba(0,0,0,0.1);
+body { font-family: Arial, sans-serif; text-align: center; background: #f4f4f4; margin: 0; padding: 0; }
+h1 { margin: 10px 0; }
+#game { 
+  display: grid; 
+  grid-template-columns: repeat(2, 1fr); 
+  gap: 10px; 
+  max-width: 400px; 
+  margin: 20px auto; 
 }
+.card {
+  background: white; border: 2px solid #333; border-radius: 8px; padding: 15px; cursor: pointer; 
+  min-height: 60px; display: flex; justify-content: center; align-items: center; font-size: 18px; 
+  box-shadow: 2px 2px 8px rgba(0,0,0,0.1);
+  transition: background-color 0.3s;
+}
+.card.correct { background-color: #a8e6a3; }
+.card.incorrect { background-color: #f5a3a3; }
 #scoreboard { margin-top: 20px; }
 table { margin: 0 auto; border-collapse: collapse; }
 th, td { border: 1px solid #333; padding: 6px 12px; }
+@media (max-width: 500px) {
+  #game { max-width: 90%; }
+}
