@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <title>Vite les Mots 🎯</title>
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=1754697848">
   <link rel="manifest" href="manifest.json">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 </head>
@@ -27,7 +27,7 @@
     </div>
   </div>
 
-  <script src="vocab.js"></script>
+  <script src="vocab.js?v=1754697848"></script>
   <script>
     let cards = [];
     let selected = [];
@@ -157,11 +157,14 @@
       }
     }
 
+    
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('service-worker.js');
+        navigator.serviceWorker.register('service-worker.js?v=1754697848').then(reg => {
+          if (reg.update) { reg.update(); }
+        });
       });
     }
-  </script>
+</script>
 </body>
 </html>
