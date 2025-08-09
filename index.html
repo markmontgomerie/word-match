@@ -3,16 +3,28 @@
 <head>
   <meta charset="UTF-8">
   <title>Vite les Mots 🎯</title>
-  <link rel="stylesheet" href="style.css?v=1754697848">
+  <link rel="stylesheet" href="style.css?v=cat2">
   <link rel="manifest" href="manifest.json">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 </head>
 <body>
   <header>🎯 Vite les Mots</header>
-  <div>
-    <input id="playerName" placeholder="Enter your name">
-    <button onclick="startGame()">Start Game</button>
+
+  <div id="controls">
+    <div class="row">
+      <input id="playerName" placeholder="Enter your name">
+      <select id="category"></select>
+    </div>
+    <div class="row">
+      <div>
+        <label><input type="radio" name="mode" value="EN2FR" checked> English → French</label>
+        <label><input type="radio" name="mode" value="FR2EN"> French → English</label>
+        <label><input type="radio" name="mode" value="EITHER"> Either direction</label>
+      </div>
+      <button onclick="startGame()">Start Game</button>
+    </div>
   </div>
+
   <div id="game-info">
     <span id="timer">Time: 60</span> | <span id="score">Score: 0</span>
   </div>
@@ -27,25 +39,65 @@
     </div>
   </div>
 
-  <script src="vocab.js?v=1754697848"></script>
+  <script src="vocab.js?v=cat2"></script>
   <script>
+    const ROUND_DURATION = 60;
+    const INITIAL_PAIRS = 5;
+    const ROUND_POOL_SIZE = 300;
+    const AVOID_ACTIVE_DUPES = true;
+
     let cards = [];
+    let activeKeys = new Set();
     let selected = [];
     let score = 0;
-    let timeLeft = 60;
+    let timeLeft = ROUND_DURATION;
     let timerInterval;
     let gameActive = false;
+
+    let sessionPool = [];
+    let poolIndex = 0;
+    let currentMode = 'EN2FR';
+    let currentCategory = null;
+
+    window.addEventListener('load', () => {
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('service-worker.js?v=cat2').then(reg => reg.update && reg.update());
+      }
+      const catSel = document.getElementById('category');
+      const order = [
+        "Verbs (with conjugations)",
+        "Nouns: Around Town",
+        "Nouns: At Home",
+        "Nouns: Directions",
+        "Nouns: Food",
+        "Nouns: Animals",
+        "Nouns: Technology"
+      ];
+      const cats = getCategories();
+      const finalCats = order.filter(c => cats.includes(c));
+      finalCats.forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c; opt.textContent = c;
+        catSel.appendChild(opt);
+      });
+      if (finalCats.length) catSel.value = finalCats[0];
+    });
 
     function startGame() {
       const name = document.getElementById('playerName').value.trim();
       if (!name) { alert('Enter your name'); return; }
+      const modeInput = document.querySelector('input[name="mode"]:checked');
+      currentMode = modeInput ? modeInput.value : 'EN2FR';
+      currentCategory = document.getElementById('category').value;
+
       score = 0;
-      timeLeft = 60;
+      timeLeft = ROUND_DURATION;
       gameActive = true;
       document.getElementById('score').innerText = 'Score: 0';
-      document.getElementById('timer').innerText = 'Time: 60';
+      document.getElementById('timer').innerText = 'Time: ' + ROUND_DURATION;
       selected = [];
-      generateCards();
+      initSessionPool();
+      dealInitialBoard();
       clearInterval(timerInterval);
       timerInterval = setInterval(() => {
         timeLeft--;
@@ -57,16 +109,39 @@
       }, 1000);
     }
 
-    function generateCards() {
-      cards = [];
-      const usedPairs = [];
-      while (usedPairs.length < 5) {
-        const pair = vocab[Math.floor(Math.random() * vocab.length)];
-        if (!usedPairs.includes(pair)) {
-          usedPairs.push(pair);
-          cards.push({ word: pair.english, match: pair.french, lang: 'en' });
-          cards.push({ word: pair.french, match: pair.english, lang: 'fr' });
+    function initSessionPool() {
+      const base = getPairsForCategory(currentCategory);
+      const clone = base.slice();
+      shuffle(clone);
+      const take = Math.min(clone.length, ROUND_POOL_SIZE);
+      sessionPool = clone.slice(0, take);
+      poolIndex = 0;
+    }
+
+    function nextPair() {
+      if (sessionPool.length === 0) return null;
+      for (let tries = 0; tries < sessionPool.length; tries++) {
+        if (poolIndex >= sessionPool.length) {
+          shuffle(sessionPool);
+          poolIndex = 0;
         }
+        const p = sessionPool[poolIndex++];
+        const key = p.english + '|' + p.french;
+        if (!AVOID_ACTIVE_DUPES || !activeKeys.has(key)) return p;
+      }
+      return sessionPool[Math.floor(Math.random() * sessionPool.length)];
+    }
+
+    function dealInitialBoard() {
+      cards = [];
+      activeKeys.clear();
+      for (let i = 0; i < INITIAL_PAIRS; i++) {
+        const pair = nextPair();
+        if (!pair) break;
+        const key = pair.english + '|' + pair.french;
+        activeKeys.add(key);
+        cards.push({ word: pair.english, match: pair.french, lang: 'en', key });
+        cards.push({ word: pair.french, match: pair.english, lang: 'fr', key });
       }
       shuffle(cards);
       renderCards();
@@ -84,21 +159,29 @@
       });
     }
 
+    function isValidMatch(first, second) {
+      const pairMatch = first.card.match === second.card.word && first.card.key === second.card.key;
+      if (!pairMatch) return false;
+      if (currentMode === 'EN2FR') return first.card.lang === 'en';
+      if (currentMode === 'FR2EN') return first.card.lang === 'fr';
+      return true; // EITHER
+    }
+
     function selectCard(element, card, idx) {
       if (!gameActive) return;
       if (selected.some(s => s.idx === idx)) return;
       selected.push({ element, card, idx });
       if (selected.length === 2) {
         const [first, second] = selected;
-        if (first.card.match === second.card.word && first.card.lang === 'en') {
+        if (isValidMatch(first, second)) {
           first.element.classList.add('correct');
           second.element.classList.add('correct');
           score++;
           document.getElementById('score').innerText = 'Score: ' + score;
           setTimeout(() => {
-            replacePair(first.idx, second.idx);
+            replacePair(first.idx, second.idx, first.card.key);
             selected = [];
-          }, 300);
+          }, 250);
         } else {
           first.element.classList.add('incorrect');
           second.element.classList.add('incorrect');
@@ -106,15 +189,19 @@
             first.element.classList.remove('incorrect');
             second.element.classList.remove('incorrect');
             selected = [];
-          }, 500);
+          }, 400);
         }
       }
     }
 
-    function replacePair(idx1, idx2) {
-      const pair = vocab[Math.floor(Math.random() * vocab.length)];
-      cards[idx1] = { word: pair.english, match: pair.french, lang: 'en' };
-      cards[idx2] = { word: pair.french, match: pair.english, lang: 'fr' };
+    function replacePair(idx1, idx2, oldKey) {
+      activeKeys.delete(oldKey);
+      const pair = nextPair();
+      if (!pair) return;
+      const key = pair.english + '|' + pair.french;
+      activeKeys.add(key);
+      cards[idx1] = { word: pair.english, match: pair.french, lang: 'en', key };
+      cards[idx2] = { word: pair.french, match: pair.english, lang: 'fr', key };
       renderCards();
     }
 
@@ -122,24 +209,24 @@
       if (!gameActive) return;
       gameActive = false;
       const name = document.getElementById('playerName').value.trim();
-      saveScore(name, score);
+      saveScore(name, score, currentCategory, currentMode);
       showLeaderboard();
       document.getElementById('final-score').innerText = 'Your score: ' + score;
       document.getElementById('modal').style.display = 'flex';
     }
 
-    function saveScore(name, score) {
+    function saveScore(name, score, category, mode) {
       const scores = JSON.parse(localStorage.getItem('scores') || '[]');
-      scores.push({ name, score, date: new Date().toLocaleDateString() });
+      scores.push({ name, score, date: new Date().toLocaleDateString(), category, mode });
       localStorage.setItem('scores', JSON.stringify(scores));
     }
 
     function showLeaderboard() {
       const scores = JSON.parse(localStorage.getItem('scores') || '[]');
       scores.sort((a,b) => b.score - a.score);
-      let html = '<h3>Leaderboard</h3><table><tr><th>Name</th><th>Score</th><th>Date</th></tr>';
+      let html = '<h3>Leaderboard</h3><table><tr><th>Name</th><th>Score</th><th>Category</th><th>Mode</th><th>Date</th></tr>';
       scores.slice(0,10).forEach(s => {
-        html += `<tr><td>${s.name}</td><td>${s.score}</td><td>${s.date}</td></tr>`;
+        html += `<tr><td>${s.name}</td><td>${s.score}</td><td>${s.category||''}</td><td>${s.mode||''}</td><td>${s.date}</td></tr>`;
       });
       html += '</table>';
       document.getElementById('scoreboard').innerHTML = html;
@@ -156,15 +243,6 @@
         [array[i], array[j]] = [array[j], array[i]];
       }
     }
-
-    
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('service-worker.js?v=1754697848').then(reg => {
-          if (reg.update) { reg.update(); }
-        });
-      });
-    }
-</script>
+  </script>
 </body>
 </html>
