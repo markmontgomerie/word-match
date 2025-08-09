@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <title>Vite les Mots 🎯</title>
-  <link rel="stylesheet" href="style.css?v=cat2">
+  <link rel="stylesheet" href="style.css">
   <link rel="manifest" href="manifest.json">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 </head>
@@ -20,6 +20,7 @@
         <label><input type="radio" name="mode" value="EN2FR" checked> English → French</label>
         <label><input type="radio" name="mode" value="FR2EN"> French → English</label>
         <label><input type="radio" name="mode" value="EITHER"> Either direction</label>
+        <div class="small-muted" id="dirHint"></div>
       </div>
       <button onclick="startGame()">Start Game</button>
     </div>
@@ -28,18 +29,23 @@
   <div id="game-info">
     <span id="timer">Time: 60</span> | <span id="score">Score: 0</span>
   </div>
-  <div id="game"></div>
+
+  <div id="mixed-grid" style="display:none;"></div>
+  <div id="two-col" style="display:none;">
+    <div class="col" id="from-col"></div>
+    <div class="col" id="to-col"></div>
+  </div>
 
   <div id="modal">
     <div id="modal-content">
       <h2>Game Over!</h2>
       <p id="final-score"></p>
       <div id="scoreboard"></div>
-      <button onclick="closeModal()">Play Again</button>
+      <button onclick="closeModal()">Close</button>
     </div>
   </div>
 
-  <script src="vocab.js?v=cat2"></script>
+  <script src="vocab.js"></script>
   <script>
     const ROUND_DURATION = 60;
     const INITIAL_PAIRS = 5;
@@ -47,6 +53,8 @@
     const AVOID_ACTIVE_DUPES = true;
 
     let cards = [];
+    let leftCards = [];
+    let rightCards = [];
     let activeKeys = new Set();
     let selected = [];
     let score = 0;
@@ -60,9 +68,7 @@
     let currentCategory = null;
 
     window.addEventListener('load', () => {
-      if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('service-worker.js?v=cat2').then(reg => reg.update && reg.update());
-      }
+      if ('serviceWorker' in navigator) { navigator.serviceWorker.register('service-worker.js'); }
       const catSel = document.getElementById('category');
       const order = [
         "Verbs (with conjugations)",
@@ -75,13 +81,20 @@
       ];
       const cats = getCategories();
       const finalCats = order.filter(c => cats.includes(c));
-      finalCats.forEach(c => {
-        const opt = document.createElement('option');
-        opt.value = c; opt.textContent = c;
-        catSel.appendChild(opt);
-      });
+      finalCats.forEach(c => { const opt = document.createElement('option'); opt.value = c; opt.textContent = c; catSel.appendChild(opt); });
       if (finalCats.length) catSel.value = finalCats[0];
+
+      document.querySelectorAll('input[name="mode"]').forEach(r => r.addEventListener('change', updateDirHint));
+      updateDirHint();
     });
+
+    function updateDirHint() {
+      const mode = document.querySelector('input[name="mode"]:checked').value;
+      const hint = document.getElementById('dirHint');
+      if (mode === 'EN2FR') hint.textContent = 'Left column: English, Right column: Français';
+      else if (mode === 'FR2EN') hint.textContent = 'Left column: Français, Right column: English';
+      else hint.textContent = 'Either direction: mixed grid';
+    }
 
     function startGame() {
       const name = document.getElementById('playerName').value.trim();
@@ -90,23 +103,23 @@
       currentMode = modeInput ? modeInput.value : 'EN2FR';
       currentCategory = document.getElementById('category').value;
 
-      score = 0;
-      timeLeft = ROUND_DURATION;
-      gameActive = true;
+      score = 0; timeLeft = ROUND_DURATION; gameActive = true;
       document.getElementById('score').innerText = 'Score: 0';
       document.getElementById('timer').innerText = 'Time: ' + ROUND_DURATION;
       selected = [];
       initSessionPool();
-      dealInitialBoard();
       clearInterval(timerInterval);
       timerInterval = setInterval(() => {
         timeLeft--;
         document.getElementById('timer').innerText = 'Time: ' + timeLeft;
-        if (timeLeft <= 0) {
-          clearInterval(timerInterval);
-          endGame();
-        }
+        if (timeLeft <= 0) { clearInterval(timerInterval); endGame(); }
       }, 1000);
+
+      document.getElementById('mixed-grid').style.display = (currentMode === 'EITHER') ? '' : 'none';
+      document.getElementById('two-col').style.display = (currentMode === 'EITHER') ? 'none' : '';
+
+      if (currentMode === 'EITHER') dealMixedBoard();
+      else dealTwoColBoard();
     }
 
     function initSessionPool() {
@@ -121,88 +134,113 @@
     function nextPair() {
       if (sessionPool.length === 0) return null;
       for (let tries = 0; tries < sessionPool.length; tries++) {
-        if (poolIndex >= sessionPool.length) {
-          shuffle(sessionPool);
-          poolIndex = 0;
-        }
+        if (poolIndex >= sessionPool.length) { shuffle(sessionPool); poolIndex = 0; }
         const p = sessionPool[poolIndex++];
-        const key = p.english + '|' + p.french;
+        const key = (p.english + '|' + p.french).toLowerCase();
         if (!AVOID_ACTIVE_DUPES || !activeKeys.has(key)) return p;
       }
       return sessionPool[Math.floor(Math.random() * sessionPool.length)];
     }
 
-    function dealInitialBoard() {
-      cards = [];
-      activeKeys.clear();
+    // Mixed mode
+    function dealMixedBoard() {
+      cards = []; activeKeys.clear();
       for (let i = 0; i < INITIAL_PAIRS; i++) {
-        const pair = nextPair();
-        if (!pair) break;
-        const key = pair.english + '|' + pair.french;
+        const pair = nextPair(); if (!pair) break;
+        const key = (pair.english + '|' + pair.french).toLowerCase();
         activeKeys.add(key);
         cards.push({ word: pair.english, match: pair.french, lang: 'en', key });
         cards.push({ word: pair.french, match: pair.english, lang: 'fr', key });
       }
-      shuffle(cards);
-      renderCards();
+      shuffle(cards); renderMixed();
     }
-
-    function renderCards() {
-      const gameDiv = document.getElementById('game');
-      gameDiv.innerHTML = '';
+    function renderMixed() {
+      const grid = document.getElementById('mixed-grid');
+      grid.innerHTML = '';
       cards.forEach((card, idx) => {
-        const el = document.createElement('div');
-        el.className = 'card';
-        el.innerText = card.word;
-        el.onclick = () => selectCard(el, card, idx);
-        gameDiv.appendChild(el);
+        const el = document.createElement('div'); el.className = 'card'; el.innerText = card.word;
+        el.onclick = () => selectCardMixed(el, card, idx); grid.appendChild(el);
       });
     }
-
-    function isValidMatch(first, second) {
-      const pairMatch = first.card.match === second.card.word && first.card.key === second.card.key;
-      if (!pairMatch) return false;
-      if (currentMode === 'EN2FR') return first.card.lang === 'en';
-      if (currentMode === 'FR2EN') return first.card.lang === 'fr';
-      return true; // EITHER
-    }
-
-    function selectCard(element, card, idx) {
+    function selectCardMixed(element, card, idx) {
       if (!gameActive) return;
       if (selected.some(s => s.idx === idx)) return;
       selected.push({ element, card, idx });
       if (selected.length === 2) {
-        const [first, second] = selected;
-        if (isValidMatch(first, second)) {
-          first.element.classList.add('correct');
-          second.element.classList.add('correct');
-          score++;
-          document.getElementById('score').innerText = 'Score: ' + score;
-          setTimeout(() => {
-            replacePair(first.idx, second.idx, first.card.key);
-            selected = [];
-          }, 250);
-        } else {
-          first.element.classList.add('incorrect');
-          second.element.classList.add('incorrect');
-          setTimeout(() => {
-            first.element.classList.remove('incorrect');
-            second.element.classList.remove('incorrect');
-            selected = [];
-          }, 400);
+        const [a, b] = selected;
+        const ok = a.card.match === b.card.word && a.card.key === b.card.key;
+        if (ok) { a.element.classList.add('correct'); b.element.classList.add('correct'); score++; document.getElementById('score').innerText = 'Score: ' + score;
+          setTimeout(() => { replacePairMixed(a.idx, b.idx, a.card.key); selected = []; }, 220);
+        } else { a.element.classList.add('incorrect'); b.element.classList.add('incorrect');
+          setTimeout(() => { a.element.classList.remove('incorrect'); b.element.classList.remove('incorrect'); selected = []; }, 360);
         }
       }
     }
-
-    function replacePair(idx1, idx2, oldKey) {
+    function replacePairMixed(i1, i2, oldKey) {
       activeKeys.delete(oldKey);
-      const pair = nextPair();
-      if (!pair) return;
-      const key = pair.english + '|' + pair.french;
+      const pair = nextPair(); if (!pair) return;
+      const key = (pair.english + '|' + pair.french).toLowerCase();
       activeKeys.add(key);
-      cards[idx1] = { word: pair.english, match: pair.french, lang: 'en', key };
-      cards[idx2] = { word: pair.french, match: pair.english, lang: 'fr', key };
-      renderCards();
+      cards[i1] = { word: pair.english, match: pair.french, lang: 'en', key };
+      cards[i2] = { word: pair.french, match: pair.english, lang: 'fr', key };
+      renderMixed();
+    }
+
+    // Two-column modes
+    function dealTwoColBoard() {
+      leftCards = []; rightCards = []; activeKeys.clear();
+      for (let i = 0; i < INITIAL_PAIRS; i++) {
+        const pair = nextPair(); if (!pair) break;
+        const key = (pair.english + '|' + pair.french).toLowerCase();
+        activeKeys.add(key);
+        if (currentMode === 'EN2FR') {
+          leftCards.push({ word: pair.english, match: pair.french, lang: 'en', key, side: 'left' });
+          rightCards.push({ word: pair.french, match: pair.english, lang: 'fr', key, side: 'right' });
+        } else {
+          leftCards.push({ word: pair.french, match: pair.english, lang: 'fr', key, side: 'left' });
+          rightCards.push({ word: pair.english, match: pair.french, lang: 'en', key, side: 'right' });
+        }
+      }
+      shuffle(leftCards); shuffle(rightCards); renderTwoCol();
+    }
+    function renderTwoCol() {
+      const left = document.getElementById('from-col'); const right = document.getElementById('to-col');
+      left.innerHTML = ''; right.innerHTML = '';
+      leftCards.forEach((card, idx) => { const el = document.createElement('div'); el.className = 'card'; el.innerText = card.word;
+        el.onclick = () => selectTwoCol(el, card, idx, 'left'); left.appendChild(el); });
+      rightCards.forEach((card, idx) => { const el = document.createElement('div'); el.className = 'card'; el.innerText = card.word;
+        el.onclick = () => selectTwoCol(el, card, idx, 'right'); right.appendChild(el); });
+    }
+    function selectTwoCol(element, card, idx, side) {
+      if (!gameActive) return;
+      selected.push({ element, card, idx, side });
+      if (selected.length === 2) {
+        const [a, b] = selected;
+        const crossCols = a.side !== b.side;
+        const match = a.card.key === b.card.key;
+        const dirOk = (currentMode === 'EN2FR' && a.card.lang === 'en') || (currentMode === 'FR2EN' && a.card.lang === 'fr');
+        if (crossCols && match && dirOk) {
+          a.element.classList.add('correct'); b.element.classList.add('correct');
+          score++; document.getElementById('score').innerText = 'Score: ' + score;
+          setTimeout(() => { replaceTwoCol(a, b); selected = []; }, 220);
+        } else {
+          a.element.classList.add('incorrect'); b.element.classList.add('incorrect');
+          setTimeout(() => { a.element.classList.remove('incorrect'); b.element.classList.remove('incorrect'); selected = []; }, 360);
+        }
+      }
+    }
+    function replaceTwoCol(a, b) {
+      const oldKey = a.card.key; activeKeys.delete(oldKey);
+      const pair = nextPair(); if (!pair) return;
+      const key = (pair.english + '|' + pair.french).toLowerCase(); activeKeys.add(key);
+      if (currentMode === 'EN2FR') {
+        leftCards[a.idx]  = { word: pair.english, match: pair.french, lang: 'en', key, side: 'left' };
+        rightCards[b.idx] = { word: pair.french, match: pair.english, lang: 'fr', key, side: 'right' };
+      } else {
+        leftCards[a.idx]  = { word: pair.french, match: pair.english, lang: 'fr', key, side: 'left' };
+        rightCards[b.idx] = { word: pair.english, match: pair.french, lang: 'en', key, side: 'right' };
+      }
+      renderTwoCol();
     }
 
     function endGame() {
@@ -214,35 +252,21 @@
       document.getElementById('final-score').innerText = 'Your score: ' + score;
       document.getElementById('modal').style.display = 'flex';
     }
-
     function saveScore(name, score, category, mode) {
       const scores = JSON.parse(localStorage.getItem('scores') || '[]');
-      scores.push({ name, score, date: new Date().toLocaleDateString(), category, mode });
+      const modeLabel = mode === 'EN2FR' ? 'EN→FR' : (mode === 'FR2EN' ? 'FR→EN' : 'Either');
+      scores.push({ name, score, date: new Date().toLocaleDateString(), category, mode: modeLabel });
       localStorage.setItem('scores', JSON.stringify(scores));
     }
-
     function showLeaderboard() {
       const scores = JSON.parse(localStorage.getItem('scores') || '[]');
       scores.sort((a,b) => b.score - a.score);
-      let html = '<h3>Leaderboard</h3><table><tr><th>Name</th><th>Score</th><th>Category</th><th>Mode</th><th>Date</th></tr>';
-      scores.slice(0,10).forEach(s => {
-        html += `<tr><td>${s.name}</td><td>${s.score}</td><td>${s.category||''}</td><td>${s.mode||''}</td><td>${s.date}</td></tr>`;
-      });
-      html += '</table>';
-      document.getElementById('scoreboard').innerHTML = html;
+      let html = '<h3>Leaderboard</h3><table><tr><th>Name</th><th>Score</th><th>Category</th><th>Direction</th><th>Date</th></tr>';
+      scores.slice(0,10).forEach(s => { html += `<tr><td>${s.name}</td><td>${s.score}</td><td>${s.category||''}</td><td>${s.mode||''}</td><td>${s.date}</td></tr>`; });
+      html += '</table>'; document.getElementById('scoreboard').innerHTML = html;
     }
-
-    function closeModal() {
-      document.getElementById('modal').style.display = 'none';
-      startGame();
-    }
-
-    function shuffle(array) {
-      for (let i = array.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [array[i], array[j]] = [array[j], array[i]];
-      }
-    }
+    function closeModal() { document.getElementById('modal').style.display = 'none'; }
+    function shuffle(array) { for (let i = array.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [array[i], array[j]] = [array[j], array[i]]; } }
   </script>
 </body>
 </html>
