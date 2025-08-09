@@ -1,27 +1,27 @@
 
 @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap');
 body { font-family: 'Poppins', sans-serif; background: linear-gradient(135deg, #89f7fe 0%, #66a6ff 100%); margin: 0; padding: 0; text-align: center; }
-header { padding: 10px; color: white; font-size: 1.5em; }
-#controls { display: grid; grid-template-columns: 1fr; gap: 8px; max-width: 680px; margin: 0 auto; padding: 8px 12px; }
-#controls .row { display: grid; grid-template-columns: 1fr; gap: 8px; }
-@media (min-width: 640px) { #controls .row { grid-template-columns: 1fr 1fr; } }
+header { padding: 10px; color: white; font-size: 1.4em; }
+#controls { display: grid; grid-template-columns: 1fr; gap: 10px; max-width: 680px; margin: 0 auto; padding: 8px 12px; }
+#controls .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 520px) { #controls .row { grid-template-columns: 1fr; } }
 select, input[type="text"] { padding: 8px; border-radius: 8px; border: 1px solid #ccc; }
-button { padding: 10px 14px; border-radius: 10px; border: none; background: #1f7aff; color: white; font-weight: 600; }
-#installBar { display:none; background: rgba(255,255,255,0.95); padding: 8px; margin: 8px auto 0; max-width: 680px; border-radius: 8px; }
-#iosTip { display:none; background: rgba(255,255,255,0.95); padding: 8px; margin: 8px auto 0; max-width: 680px; border-radius: 8px; font-size: 14px; }
+button { padding: 8px 12px; border-radius: 10px; border: none; background: #1f7aff; color: white; font-weight: 600; margin: 2px 6px; }
 #game-info { background: rgba(255, 255, 255, 0.9); padding: 6px 0; font-weight: 600; margin-top: 6px; }
-#mixed-grid { display: grid; gap: 10px; max-width: 600px; margin: 12px auto 24px; }
+
+#mixed-grid { display: grid; gap: 10px; max-width: 640px; margin: 12px auto 24px; }
 @media (max-width: 500px) { #mixed-grid { grid-template-columns: repeat(2, 1fr); } }
 @media (min-width: 501px) and (max-width: 800px) { #mixed-grid { grid-template-columns: repeat(3, 1fr); } }
 @media (min-width: 801px) { #mixed-grid { grid-template-columns: repeat(5, 1fr); } }
-#two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; max-width: 680px; margin: 12px auto 24px; }
-.col { display: grid; grid-template-columns: 1fr; gap: 10px; }
-.card { background: white; border-radius: 8px; padding: 15px; min-height: 60px; display: flex; justify-content: center; align-items: center; font-size: 18px; cursor: pointer; box-shadow: 2px 2px 8px rgba(0,0,0,0.15); transition: transform 0.2s, background-color 0.3s; }
-.card.correct { background-color: #a8e6a3; transform: scale(1.06); }
+
+.card { background: white; border-radius: 10px; padding: 15px; min-height: 64px; display: flex; justify-content: center; align-items: center; font-size: 18px; cursor: pointer; box-shadow: 2px 2px 8px rgba(0,0,0,0.15); transition: transform 0.2s, background-color 0.3s, box-shadow 0.2s, border-color 0.2s; border: 2px solid transparent; }
+.card.selected { box-shadow: 0 0 0 3px rgba(31,122,255,0.6) inset; border-color: #1f7aff; }
+.card.correct { background-color: #a8e6a3; transform: scale(1.04); }
 .card.incorrect { background-color: #f5a3a3; animation: shake 0.25s; }
 @keyframes shake { 0% { transform: translateX(0); } 25% { transform: translateX(-5px); } 50% { transform: translateX(5px); } 75% { transform: translateX(-5px); } 100% { transform: translateX(0); } }
+
 #modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); display: none; justify-content: center; align-items: center; z-index: 9999; }
-#modal-content { background: white; padding: 20px; border-radius: 8px; max-width: 90%; position: relative; }
+#modal-content { background: white; padding: 20px; border-radius: 10px; max-width: 90%; }
 table { margin: 0 auto; border-collapse: collapse; }
 th, td { border: 1px solid #333; padding: 6px 12px; }
 .small-muted { font-size: 12px; opacity: 0.8; }
