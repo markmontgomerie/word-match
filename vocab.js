@@ -1,5 +1,4 @@
 // Expanded vocab by category (no placeholders).
-// Feel free to extend these lists further.
 const VOCAB = {
   "Verbs (with conjugations)": [
     { english: "to be", french: "être" },
@@ -101,21 +100,11 @@ const VOCAB = {
     { english: "folder", french: "dossier" }, { english: "download", french: "télécharger" }, { english: "upload", french: "téléverser" }
   ]
 };
-
 function getPairsForCategory(catName) {
   const list = VOCAB[catName] || [];
-  const seen = new Set();
-  const out = [];
-  for (const item of list) {
-    const key = `${item.english}|${item.french}`.toLowerCase();
-    if (!seen.has(key)) {
-      seen.add(key);
-      out.push(item);
-    }
-  }
+  const seen = new Set(); const out = [];
+  for (const item of list) { const key = `${item.english}|${item.french}`.toLowerCase();
+    if (!seen.has(key)) { seen.add(key); out.push(item); } }
   return out;
 }
-
-function getCategories() {
-  return Object.keys(VOCAB);
-}
+function getCategories() { return Object.keys(VOCAB); }

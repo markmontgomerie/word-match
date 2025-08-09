@@ -10,6 +10,12 @@
 <body>
   <header>🎯 Vite les Mots</header>
 
+  <div id="installBar">
+    <span>Install this app for a full-screen experience.</span>
+    <button id="installBtn">Install</button>
+  </div>
+  <div id="iosTip">On iPhone, tap the Share icon, then "Add to Home Screen" to install.</div>
+
   <div id="controls">
     <div class="row">
       <input id="playerName" placeholder="Enter your name">
@@ -22,7 +28,21 @@
         <label><input type="radio" name="mode" value="EITHER"> Either direction</label>
         <div class="small-muted" id="dirHint"></div>
       </div>
-      <button onclick="startGame()">Start Game</button>
+      <button id="startBtn">Start Game</button>
+    </div>
+    <div class="row">
+      <div>
+        <label>Refill:</label>
+        <select id="refillMode">
+          <option value="instant" selected>Instant</option>
+          <option value="delayed">Delayed</option>
+          <option value="batch">Batch after clear</option>
+        </select>
+      </div>
+      <div>
+        <label>Delay (ms):</label>
+        <input type="number" id="delayMs" value="600" min="0" step="100">
+      </div>
     </div>
   </div>
 
@@ -41,7 +61,7 @@
       <h2>Game Over!</h2>
       <p id="final-score"></p>
       <div id="scoreboard"></div>
-      <button onclick="closeModal()">Close</button>
+      <button id="closeBtn" type="button">Close</button>
     </div>
   </div>
 
@@ -66,9 +86,30 @@
     let poolIndex = 0;
     let currentMode = 'EN2FR';
     let currentCategory = null;
+    let refillMode = 'instant';
+    let replacementDelay = 600;
+    let batchQueue = [];
+
+    let deferredPrompt = null;
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredPrompt = e;
+      document.getElementById('installBar').style.display = 'block';
+    });
+    document.getElementById('installBtn').addEventListener('click', async () => {
+      if (!deferredPrompt) return;
+      deferredPrompt.prompt();
+      await deferredPrompt.userChoice;
+      deferredPrompt = null;
+      document.getElementById('installBar').style.display = 'none';
+    });
+    const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+    const isInStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+    if (isIOS && !isInStandalone) { document.getElementById('iosTip').style.display = 'block'; }
+
+    if ('serviceWorker' in navigator) { navigator.serviceWorker.register('service-worker.js'); }
 
     window.addEventListener('load', () => {
-      if ('serviceWorker' in navigator) { navigator.serviceWorker.register('service-worker.js'); }
       const catSel = document.getElementById('category');
       const order = [
         "Verbs (with conjugations)",
@@ -85,6 +126,14 @@
       if (finalCats.length) catSel.value = finalCats[0];
 
       document.querySelectorAll('input[name="mode"]').forEach(r => r.addEventListener('change', updateDirHint));
+      document.getElementById('refillMode').addEventListener('change', e => refillMode = e.target.value);
+      document.getElementById('delayMs').addEventListener('change', e => replacementDelay = Math.max(0, parseInt(e.target.value || '0', 10)));
+      document.getElementById('startBtn').addEventListener('click', startGame);
+
+      document.getElementById('closeBtn').addEventListener('click', closeModal, { passive: true });
+      document.getElementById('closeBtn').addEventListener('touchend', closeModal, { passive: true });
+      document.getElementById('modal').addEventListener('click', (e) => { if (e.target.id === 'modal') closeModal(); });
+
       updateDirHint();
     });
 
@@ -102,6 +151,9 @@
       const modeInput = document.querySelector('input[name="mode"]:checked');
       currentMode = modeInput ? modeInput.value : 'EN2FR';
       currentCategory = document.getElementById('category').value;
+      refillMode = document.getElementById('refillMode').value;
+      replacementDelay = Math.max(0, parseInt(document.getElementById('delayMs').value || '0', 10));
+      batchQueue = [];
 
       score = 0; timeLeft = ROUND_DURATION; gameActive = true;
       document.getElementById('score').innerText = 'Score: 0';
@@ -169,22 +221,40 @@
       if (selected.length === 2) {
         const [a, b] = selected;
         const ok = a.card.match === b.card.word && a.card.key === b.card.key;
-        if (ok) { a.element.classList.add('correct'); b.element.classList.add('correct'); score++; document.getElementById('score').innerText = 'Score: ' + score;
-          setTimeout(() => { replacePairMixed(a.idx, b.idx, a.card.key); selected = []; }, 220);
-        } else { a.element.classList.add('incorrect'); b.element.classList.add('incorrect');
+        if (ok) {
+          a.element.classList.add('correct'); b.element.classList.add('correct'); score++; document.getElementById('score').innerText = 'Score: ' + score;
+          if (refillMode === 'batch') {
+            a.element.style.visibility = 'hidden'; b.element.style.visibility = 'hidden';
+            batchQueue.push({ i1: a.idx, i2: b.idx, key: a.card.key });
+            if (batchQueue.length === INITIAL_PAIRS) refillBatchMixed();
+            selected = []; return;
+          }
+          setTimeout(() => { replacePairMixedRandomSlots(a.idx, b.idx, a.card.key); selected = []; }, replacementDelay);
+        } else {
+          a.element.classList.add('incorrect'); b.element.classList.add('incorrect');
           setTimeout(() => { a.element.classList.remove('incorrect'); b.element.classList.remove('incorrect'); selected = []; }, 360);
         }
       }
     }
-    function replacePairMixed(i1, i2, oldKey) {
+    function replacePairMixedRandomSlots(i1, i2, oldKey) {
       activeKeys.delete(oldKey);
       const pair = nextPair(); if (!pair) return;
-      const key = (pair.english + '|' + pair.french).toLowerCase();
-      activeKeys.add(key);
-      cards[i1] = { word: pair.english, match: pair.french, lang: 'en', key };
-      cards[i2] = { word: pair.french, match: pair.english, lang: 'fr', key };
+      const key = (pair.english + '|' + pair.french).toLowerCase(); activeKeys.add(key);
+      const indices = [i1, i2].sort((a,b)=>b-a);
+      indices.forEach(i => cards.splice(i,1));
+      const newCards = [
+        { word: pair.english, match: pair.french, lang: 'en', key },
+        { word: pair.french, match: pair.english, lang: 'fr', key }
+      ];
+      const pos1 = Math.floor(Math.random() * (cards.length + 1));
+      let pos2 = Math.floor(Math.random() * (cards.length + 1));
+      if (pos2 === pos1) pos2 = (pos2 + 1) % (cards.length + 1);
+      cards.splice(pos1, 0, newCards[0]);
+      const adj = pos2 >= pos1 ? pos2 + 1 : pos2;
+      cards.splice(adj, 0, newCards[1]);
       renderMixed();
     }
+    function refillBatchMixed() { cards = []; activeKeys.clear(); batchQueue = []; dealMixedBoard(); }
 
     // Two-column modes
     function dealTwoColBoard() {
@@ -220,29 +290,41 @@
         const match = a.card.key === b.card.key;
         const dirOk = (currentMode === 'EN2FR' && a.card.lang === 'en') || (currentMode === 'FR2EN' && a.card.lang === 'fr');
         if (crossCols && match && dirOk) {
-          a.element.classList.add('correct'); b.element.classList.add('correct');
-          score++; document.getElementById('score').innerText = 'Score: ' + score;
-          setTimeout(() => { replaceTwoCol(a, b); selected = []; }, 220);
+          a.element.classList.add('correct'); b.element.classList.add('correct'); score++; document.getElementById('score').innerText = 'Score: ' + score;
+          if (refillMode === 'batch') {
+            a.element.style.visibility = 'hidden'; b.element.style.visibility = 'hidden';
+            batchQueue.push({ a, b });
+            if (batchQueue.length === INITIAL_PAIRS) refillBatchTwoCol();
+            selected = []; return;
+          }
+          setTimeout(() => { replaceTwoColRandomSlots(a, b); selected = []; }, replacementDelay);
         } else {
           a.element.classList.add('incorrect'); b.element.classList.add('incorrect');
           setTimeout(() => { a.element.classList.remove('incorrect'); b.element.classList.remove('incorrect'); selected = []; }, 360);
         }
       }
     }
-    function replaceTwoCol(a, b) {
+    function replaceTwoColRandomSlots(a, b) {
       const oldKey = a.card.key; activeKeys.delete(oldKey);
       const pair = nextPair(); if (!pair) return;
       const key = (pair.english + '|' + pair.french).toLowerCase(); activeKeys.add(key);
+      leftCards.splice(a.idx, 1); rightCards.splice(b.idx, 1);
+      let leftNew, rightNew;
       if (currentMode === 'EN2FR') {
-        leftCards[a.idx]  = { word: pair.english, match: pair.french, lang: 'en', key, side: 'left' };
-        rightCards[b.idx] = { word: pair.french, match: pair.english, lang: 'fr', key, side: 'right' };
+        leftNew  = { word: pair.english, match: pair.french, lang: 'en', key, side: 'left' };
+        rightNew = { word: pair.french, match: pair.english, lang: 'fr', key, side: 'right' };
       } else {
-        leftCards[a.idx]  = { word: pair.french, match: pair.english, lang: 'fr', key, side: 'left' };
-        rightCards[b.idx] = { word: pair.english, match: pair.french, lang: 'en', key, side: 'right' };
+        leftNew  = { word: pair.french, match: pair.english, lang: 'fr', key, side: 'left' };
+        rightNew = { word: pair.english, match: pair.french, lang: 'en', key, side: 'right' };
       }
+      const li = Math.floor(Math.random() * (leftCards.length + 1));
+      const ri = Math.floor(Math.random() * (rightCards.length + 1));
+      leftCards.splice(li, 0, leftNew); rightCards.splice(ri, 0, rightNew);
       renderTwoCol();
     }
+    function refillBatchTwoCol() { batchQueue = []; dealTwoColBoard(); }
 
+    // End
     function endGame() {
       if (!gameActive) return;
       gameActive = false;
@@ -263,7 +345,8 @@
       scores.sort((a,b) => b.score - a.score);
       let html = '<h3>Leaderboard</h3><table><tr><th>Name</th><th>Score</th><th>Category</th><th>Direction</th><th>Date</th></tr>';
       scores.slice(0,10).forEach(s => { html += `<tr><td>${s.name}</td><td>${s.score}</td><td>${s.category||''}</td><td>${s.mode||''}</td><td>${s.date}</td></tr>`; });
-      html += '</table>'; document.getElementById('scoreboard').innerHTML = html;
+      html += '</table>';
+      document.getElementById('scoreboard').innerHTML = html;
     }
     function closeModal() { document.getElementById('modal').style.display = 'none'; }
     function shuffle(array) { for (let i = array.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [array[i], array[j]] = [array[j], array[i]]; } }

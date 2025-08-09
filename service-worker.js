@@ -1,4 +1,4 @@
-const CACHE_NAME = 'vite-mots-cache-dirs-v1';
+const CACHE_NAME = 'vite-mots-cache-v3';
 self.addEventListener('install', e => {
   self.skipWaiting();
   e.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll([
